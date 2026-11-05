@@ -3,6 +3,8 @@
 A single-file, no-install viewer for URDF robots with live ROS 2 telemetry,
 joint control, and teleop — just open `urdf_dashboard.html` in Chrome.
 
+<img width="1667" height="1288" alt="Screenshot from 2026-11-05 15-06-23" src="https://github.com/user-attachments/assets/4fe2608c-5a4c-426b-a162-34ce3c5ed1d1" />
+
 ## Requirements
 
 - Chrome (or any modern browser)
