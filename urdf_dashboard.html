@@ -1,0 +1,1378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URDF telemetry dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e9edf1; --panel:#f8fafb; --panel-2:#eef2f5; --border:#d3dae1; --text:#18202b; --muted:#566273; --faint:#8793a2;
+  --accent:#c77a00; --accent-ink:#fff; --accent-soft:rgba(199,122,0,.13);
+  --good:#1d8f52; --warn:#b97f00; --bad:#cc3b3b; --off:#9aa5b2;
+  --vp-bg:#dfe5eb; --grid-major:#7d8b9b; --grid-minor:#a9b5c2;
+  --k:#6b4fc4; --num:#0a63b8; --str:#1c7d46; --sel:#c77a00;
+  --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f141a; --panel:#151c24; --panel-2:#1b232d; --border:#27313d; --text:#dde4ec; --muted:#93a0b0; --faint:#66727f;
+    --accent:#f0a830; --accent-ink:#1a1206; --accent-soft:rgba(240,168,48,.14);
+    --good:#3fcd82; --warn:#f0b43c; --bad:#ff6b6b; --off:#5a6573;
+    --vp-bg:#121920; --grid-major:#4f5d6d; --grid-minor:#2c3743;
+    --k:#b9a3ff; --num:#72b7ff; --str:#86dfa9; --sel:#f0a830;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:grid;grid-template-rows:48px minmax(0,1fr) 26px;background:var(--bg);color:var(--text);font:13px/1.45 var(--sans);overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+code{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);padding:1px 4px;border-radius:3px}
+
+header{display:flex;align-items:center;gap:18px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--border)}
+.brand{font-weight:600;font-size:14px;display:flex;align-items:center;gap:9px;white-space:nowrap}
+.brand svg{flex:none}
+.conn{display:flex;align-items:center;gap:8px}
+.conn input{width:230px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--off);flex:none}
+.dot.connected{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 25%,transparent)}
+.dot.connecting{background:var(--warn);animation:pulse 1s infinite}
+.dot.error{background:var(--bad)}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.dot.connecting{animation:none}}
+.hstats{margin-left:auto;display:flex;gap:16px;color:var(--muted);white-space:nowrap}
+.hstats b{color:var(--text);font-weight:500;font-family:var(--mono);font-size:12px}
+
+main{display:grid;grid-template-columns:292px minmax(0,1fr) 350px;min-height:0}
+aside{background:var(--panel);min-height:0}
+#left{border-right:1px solid var(--border);overflow:auto}
+#right{border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#center{display:grid;grid-template-rows:minmax(0,1fr) 220px;min-height:0;min-width:0}
+
+details{border-bottom:1px solid var(--border)}
+summary{list-style:none;cursor:pointer;padding:10px 14px;font-weight:600;display:flex;align-items:center;gap:8px;user-select:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+details[open]>summary::before{transform:rotate(45deg)}
+summary .count{margin-left:auto;font-weight:400;color:var(--muted);font-family:var(--mono);font-size:12px}
+.sec{padding:0 14px 12px;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:6px;align-items:center}
+.row>*{flex:1}
+.hint{color:var(--muted);font-size:12px;margin:0}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+
+.btn,button.btn,label.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;white-space:nowrap;text-align:center}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:500}
+.btn.small{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input:not([type]),select{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:0}
+input.mono{font-family:var(--mono);font-size:12px}
+.seg{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.seg button{flex:1;background:var(--panel-2);border:0;padding:5px 6px;cursor:pointer;font-size:12px}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:var(--accent-soft);color:var(--text);font-weight:600;box-shadow:inset 0 -2px 0 var(--accent)}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.checks label{display:flex;align-items:center;gap:6px;cursor:pointer}
+input[type=checkbox]{accent-color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
+
+.stats{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px}
+.stats dt{color:var(--muted)} .stats dd{margin:0;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+#jointList{display:flex;flex-direction:column}
+.joint{padding:6px 0 7px;border-top:1px solid var(--border)}
+.joint:first-child{border-top:0}
+.jtop{display:flex;align-items:center;gap:6px}
+.jname{background:none;border:0;padding:0;cursor:pointer;font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}
+.jname:hover{color:var(--accent)}
+.tag{font-size:10.5px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px}
+.jval{font-family:var(--mono);font-size:12px;min-width:66px;text-align:right}
+.icon{background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;color:var(--muted);padding:0 4px;line-height:18px}
+.icon:hover{color:var(--accent);border-color:var(--border)}
+.jsub{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.joint.mimic .jname{color:var(--muted)}
+.empty{color:var(--muted);font-size:12px;padding:6px 0}
+
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;user-select:none;touch-action:none}
+.pad button{padding:10px 0;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);cursor:pointer;font-size:15px}
+.pad button.active{background:var(--accent-soft);border-color:var(--accent)}
+.pad button.stop{color:var(--bad);font-weight:600;font-size:12px}
+
+#viewport{position:relative;min-height:0;background:var(--vp-bg);overflow:hidden}
+#three{display:block;width:100%;height:100%;touch-action:none}
+.overlay{position:absolute;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:12px;backdrop-filter:blur(6px)}
+#selInfo{top:10px;left:10px;max-width:300px}
+#selInfo h4{margin:0 0 6px;font-family:var(--mono);font-size:13px;font-weight:500;display:flex;gap:8px;align-items:center}
+#selInfo h4 button{margin-left:auto}
+#vpTools{top:10px;right:10px;display:flex;gap:6px;padding:5px}
+#vpHint{bottom:10px;right:10px;color:var(--muted);padding:5px 9px}
+#emptyState{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+#emptyState div{pointer-events:auto;text-align:center;max-width:360px;background:var(--panel);border:1px dashed var(--faint);border-radius:10px;padding:20px}
+.hidden{display:none!important}
+
+#plotPanel{border-top:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.plotbar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.plotbar strong{font-weight:600}
+.sp{flex:1}
+#plotLegend{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:12px;padding:1px 4px 1px 8px;font-family:var(--mono);font-size:11px;background:var(--panel-2)}
+.chip i{width:9px;height:3px;border-radius:2px;display:inline-block}
+.chip b{font-weight:500}
+#plot{flex:1;min-height:0;width:100%;display:block}
+
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tabs button{flex:1;background:none;border:0;padding:10px 0 8px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+.tabs button span{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:4px}
+.gfilter{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.gfilter input{flex:1}
+#graphList{list-style:none;margin:0;padding:4px 0;overflow:auto;flex:0 1 38%;min-height:80px;border-bottom:1px solid var(--border)}
+#graphList li{padding:4px 12px;cursor:pointer;display:flex;flex-direction:column}
+#graphList li:hover{background:var(--panel-2)}
+#graphList li.on{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+#graphList .tn{font-family:var(--mono);font-size:12px;word-break:break-all}
+#graphList .tt{font-size:11px;color:var(--muted)}
+#graphList li.empty{cursor:default}
+#inspector{flex:1 1 62%;display:flex;flex-direction:column;min-height:0}
+.ihead{padding:8px 12px;border-bottom:1px solid var(--border)}
+.ihead .t{font-family:var(--mono);font-size:12.5px;font-weight:500;word-break:break-all}
+.ihead .meta{display:flex;gap:10px;color:var(--muted);font-size:12px;align-items:center;flex-wrap:wrap;margin-top:3px}
+.ihead .meta .hz{font-family:var(--mono);color:var(--text)}
+.ibody{flex:1;overflow:auto;padding:8px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.55}
+.ind{padding-left:14px;border-left:1px solid var(--border);margin-left:2px}
+.k{color:var(--k)} .s{color:var(--str)} .b,.n{color:var(--warn)} .m{color:var(--faint)}
+.num{color:var(--num);cursor:pointer;border-radius:3px}
+.num:hover{background:var(--accent-soft);outline:1px solid var(--accent)}
+.ilist{margin:2px 0 10px;padding:0;list-style:none}
+.ilist li{cursor:pointer;color:var(--num)} .ilist li:hover{text-decoration:underline}
+.ih{font-family:var(--sans);font-weight:600;font-size:12px;margin:6px 0 2px;color:var(--text)}
+
+footer{display:flex;align-items:center;gap:8px;padding:0 12px;border-top:1px solid var(--border);background:var(--panel);font-family:var(--mono);font-size:11px;cursor:pointer;overflow:hidden}
+#logLine{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#logPanel{position:fixed;left:0;right:0;bottom:26px;max-height:240px;overflow:auto;background:var(--panel);border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;padding:6px 12px;display:none;z-index:5}
+#logPanel.open{display:block}
+#logPanel span{color:var(--faint);margin-right:8px}
+.lv-good{color:var(--good)} .lv-warn{color:var(--warn)} .lv-bad{color:var(--bad)}
+
+body.dragging::after{content:"Drop a .urdf file and/or its mesh folder";position:fixed;inset:12px;border:2px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--bg) 85%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;z-index:10;pointer-events:none}
+
+@media (max-width: 980px){
+  body{overflow:auto;height:auto;grid-template-rows:auto auto 26px}
+  header{flex-wrap:wrap;padding:8px 12px;gap:8px}
+  .conn input{width:170px}
+  main{grid-template-columns:1fr}
+  #center{grid-template-rows:62vh 220px}
+  #right{height:75vh;border-left:0;border-top:1px solid var(--border)}
+  #left{border-right:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 15V9l5-5" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="3" cy="15" r="2" fill="var(--text)"/><circle cx="8" cy="4" r="2" fill="var(--text)"/><path d="M8 4h6" stroke="var(--muted)" stroke-width="2.2" stroke-linecap="round"/></svg>
+    URDF telemetry
+  </div>
+  <div class="conn">
+    <span id="connDot" class="dot" title="Disconnected"></span>
+    <input id="wsUrl" class="mono" spellcheck="false" aria-label="rosbridge WebSocket URL">
+    <button id="btnConnect" class="btn primary">Connect</button>
+  </div>
+  <div class="hstats">
+    <span>Robot <b id="robotName">none</b></span>
+    <span>Received <b id="rxRate">0</b> msg/s</span>
+    <span><b id="fps">0</b> fps</span>
+  </div>
+</header>
+
+<main>
+  <aside id="left">
+    <details open>
+      <summary>Robot model</summary>
+      <div class="sec">
+        <div class="row">
+          <label class="btn">Open URDF<input type="file" id="fileUrdf" accept=".urdf,.xml" hidden></label>
+          <label class="btn">Add mesh folder<input type="file" id="fileMeshes" webkitdirectory multiple hidden></label>
+        </div>
+        <button id="btnFromRos" class="btn">Load from robot_description</button>
+        <button id="btnDemo" class="btn">Load demo robot</button>
+        <label class="f">Mesh server URL (optional, maps package://pkg/… to URL/pkg/…)
+          <input id="meshBase" class="mono" placeholder="http://localhost:8000" spellcheck="false">
+        </label>
+        <p class="hint">You can also drop a .urdf and your <code>*_description</code> folder anywhere on the page. Convert xacro first: <code>xacro robot.urdf.xacro &gt; robot.urdf</code></p>
+        <dl class="stats" id="robotStats"></dl>
+        <p id="meshStatus" class="hint"></p>
+      </div>
+    </details>
+
+    <details open>
+      <summary>View</summary>
+      <div class="sec">
+        <div class="checks">
+          <label><input type="checkbox" id="vVisual" checked> Visual</label>
+          <label><input type="checkbox" id="vCollision"> Collision</label>
+          <label><input type="checkbox" id="vFrames"> Link frames</label>
+          <label><input type="checkbox" id="vGrid" checked> Grid</label>
+          <label><input type="checkbox" id="vWire"> Wireframe</label>
+          <label><input type="checkbox" id="vOdom"> Follow odometry</label>
+        </div>
+        <label class="f">Odometry topic <input id="odomTopic" class="mono" spellcheck="false"></label>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Joints <span class="count" id="jointCount">0</span></summary>
+      <div class="sec">
+        <div class="seg" id="jointSrc">
+          <button data-src="manual" class="on">Manual</button>
+          <button data-src="live">Live</button>
+          <button data-src="sim">Animate</button>
+        </div>
+        <div class="row">
+          <input id="jsTopic" class="mono" spellcheck="false" aria-label="Joint states topic">
+          <span id="jsRate" class="hint" style="flex:0 0 auto"></span>
+        </div>
+        <div class="row">
+          <button id="btnZero" class="btn small">Zero all</button>
+          <div class="seg" id="units" style="flex:0 0 auto"><button data-u="deg" class="on">deg</button><button data-u="rad">rad</button></div>
+        </div>
+        <div id="jointList"><p class="empty">Load a robot to see its joints.</p></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Drive (cmd_vel)</summary>
+      <div class="sec">
+        <div class="row">
+          <input id="cmdTopic" class="mono" spellcheck="false" aria-label="Velocity command topic">
+          <select id="cmdType" style="flex:0 0 auto">
+            <option value="geometry_msgs/msg/Twist">Twist</option>
+            <option value="geometry_msgs/msg/TwistStamped">TwistStamped</option>
+          </select>
+        </div>
+        <label class="f">Max linear <span id="linMaxV"></span><input type="range" id="linMax" min="0.05" max="2" step="0.05" value="0.3"></label>
+        <label class="f">Max angular <span id="angMaxV"></span><input type="range" id="angMax" min="0.1" max="3" step="0.05" value="0.8"></label>
+        <div class="pad" id="pad">
+          <button data-d="1,1" aria-label="Forward left">↖</button><button data-d="1,0" aria-label="Forward">↑</button><button data-d="1,-1" aria-label="Forward right">↗</button>
+          <button data-d="0,1" aria-label="Turn left">↺</button><button class="stop" id="btnStop">Stop</button><button data-d="0,-1" aria-label="Turn right">↻</button>
+          <button data-d="-1,1" aria-label="Back left">↙</button><button data-d="-1,0" aria-label="Back">↓</button><button data-d="-1,-1" aria-label="Back right">↘</button>
+        </div>
+        <label class="checks" style="grid-template-columns:1fr"><span style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="kbEnable"> Keyboard: W/S drive, A/D turn, Q/E strafe, Space stops</span></label>
+        <p class="hint" id="teleState">Commands are only sent while a button or key is held.</p>
+      </div>
+    </details>
+  </aside>
+
+  <section id="center">
+    <div id="viewport">
+      <canvas id="three"></canvas>
+      <div id="emptyState" class="hidden"><div>
+        <p style="margin:0 0 10px;font-weight:600">No robot loaded</p>
+        <p class="hint" style="margin-bottom:12px">Open a URDF, drop one here, or pull it from a running robot.</p>
+        <button class="btn primary" id="btnDemo2">Load demo robot</button>
+      </div></div>
+      <div id="selInfo" class="overlay hidden"></div>
+      <div id="vpTools" class="overlay">
+        <button class="btn small" id="btnFit">Fit view</button>
+        <button class="btn small" id="btnTop">Top</button>
+        <button class="btn small" id="btnShot">Screenshot</button>
+      </div>
+      <div id="vpHint" class="overlay">Drag to orbit, right-drag to pan, scroll to zoom, click a part to inspect it</div>
+    </div>
+    <div id="plotPanel">
+      <div class="plotbar">
+        <strong>Plot</strong>
+        <div id="plotLegend"></div>
+        <span class="sp"></span>
+        <select id="plotWindow" aria-label="Time window"><option value="10">10 s</option><option value="30" selected>30 s</option><option value="60">60 s</option><option value="120">120 s</option></select>
+        <button class="btn small" id="btnPause">Pause</button>
+        <button class="btn small" id="btnClearPlot">Clear</button>
+      </div>
+      <canvas id="plot"></canvas>
+    </div>
+  </section>
+
+  <aside id="right">
+    <div class="tabs" id="tabs">
+      <button data-tab="topics" class="on">Topics<span id="nTopics"></span></button>
+      <button data-tab="nodes">Nodes<span id="nNodes"></span></button>
+      <button data-tab="services">Services<span id="nServices"></span></button>
+    </div>
+    <div class="gfilter">
+      <input id="graphFilter" placeholder="Filter" spellcheck="false" aria-label="Filter">
+      <button class="btn small" id="btnRefresh">Refresh</button>
+    </div>
+    <ul id="graphList"><li class="empty">Connect to rosbridge to list topics.</li></ul>
+    <div id="inspector">
+      <div class="ihead" id="ihead"><div class="t">Nothing selected</div><div class="meta">Pick a topic to see live messages. Click any number to plot it.</div></div>
+      <div class="ibody" id="ibody"></div>
+    </div>
+  </aside>
+</main>
+
+<footer id="logBar" title="Click to show the log"><span id="logLine">Ready.</span><span style="color:var(--faint)">log</span></footer>
+<div id="logPanel"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+<script>
+'use strict';
+/* ============================== helpers ============================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MOVABLE = new Set(['revolute', 'continuous', 'prismatic']);
+const PALETTE = ['#2f7de1', '#e08a00', '#18a058', '#d94848', '#8b5cf6', '#0ea5b7', '#d6409f', '#7c9a12'];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('urdfdash.' + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('urdfdash.' + k, v); } catch {} }
+};
+function fmtNum(v) {
+  if (typeof v !== 'number' || !isFinite(v)) return String(v);
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-3 || a >= 1e6)) return v.toExponential(3);
+  return Number.isInteger(v) ? String(v) : v.toFixed(4).replace(/\.?0+$/, '');
+}
+function shortType(t) { return (t || '').replace('/msg/', '/').replace('/srv/', '/'); }
+function getPath(obj, path) {
+  const toks = path.match(/[^.[\]]+/g) || [];
+  let o = obj;
+  for (const t of toks) { if (o == null) return undefined; o = o[t]; }
+  return o;
+}
+
+/* ============================== log ============================== */
+const logs = [];
+function log(msg, level = 'info') {
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  logs.push({ t, msg, level });
+  if (logs.length > 300) logs.shift();
+  const f = $('#logLine'); f.className = 'lv-' + level; f.textContent = t + '  ' + msg;
+  if ($('#logPanel').classList.contains('open')) renderLogPanel();
+}
+function renderLogPanel() {
+  $('#logPanel').innerHTML = logs.slice().reverse().map(l => `<div class="lv-${l.level}"><span>${l.t}</span>${esc(l.msg)}</div>`).join('');
+}
+$('#logBar').onclick = () => { const p = $('#logPanel'); p.classList.toggle('open'); if (p.classList.contains('open')) renderLogPanel(); };
+
+if (typeof THREE === 'undefined') {
+  document.body.innerHTML = '<p style="padding:24px;font:15px sans-serif">Could not load three.js from the CDN. This page needs internet access the first time it opens.</p>';
+  throw new Error('three.js missing');
+}
+
+/* ============================== rosbridge client ============================== */
+class Ros {
+  constructor() {
+    this.ws = null; this.want = null; this.retry = null; this.fails = 0;
+    this.subs = new Map(); this.pending = new Map(); this.advertised = new Set();
+    this.idc = 0; this.rx = 0; this.onstatus = () => {}; this.onopen = () => {};
+  }
+  get connected() { return !!this.ws && this.ws.readyState === 1; }
+  connect(url) { this.want = url; this.fails = 0; this._open(url); }
+  disconnect() {
+    this.want = null; clearTimeout(this.retry);
+    if (this.ws) { const w = this.ws; this.ws = null; w.close(); }
+    this.onstatus('disconnected');
+  }
+  _open(url) {
+    clearTimeout(this.retry);
+    if (this.ws) { const w = this.ws; this.ws = null; w.onclose = null; w.close(); }
+    this.onstatus('connecting');
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { this.onstatus('error'); log('Invalid URL: ' + e.message, 'bad'); this.want = null; return; }
+    this.ws = ws;
+    ws.onopen = () => {
+      this.fails = 0; this.advertised.clear(); this.onstatus('connected');
+      log('Connected to ' + url, 'good');
+      for (const [topic, s] of this.subs) this._sendSub(topic, s);
+      this.onopen();
+    };
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.ws = null;
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('connection closed')); }
+      this.pending.clear();
+      if (this.want) {
+        this.fails++;
+        if (this.fails === 1) log('No connection to ' + url + '. Is rosbridge running? Retrying every 3 s.', 'warn');
+        this.onstatus('connecting');
+        this.retry = setTimeout(() => this.want && this._open(this.want), 3000);
+      } else this.onstatus('disconnected');
+    };
+    ws.onmessage = e => { this.rx++; let m; try { m = JSON.parse(e.data); } catch { return; } this._handle(m); };
+  }
+  send(o) { if (this.connected) this.ws.send(JSON.stringify(o)); }
+  _handle(m) {
+    if (m.op === 'publish') {
+      const s = this.subs.get(m.topic);
+      if (s) for (const f of s.listeners) { try { f(m.msg); } catch (err) { console.error(err); } }
+    } else if (m.op === 'service_response') {
+      const p = this.pending.get(m.id);
+      if (!p) return;
+      this.pending.delete(m.id); clearTimeout(p.timer);
+      if (m.result === false) p.reject(new Error(typeof m.values === 'string' ? m.values : 'service call failed'));
+      else p.resolve(m.values);
+    } else if (m.op === 'status' && (m.level === 'error' || m.level === 'warning')) {
+      log('rosbridge: ' + m.msg, m.level === 'error' ? 'bad' : 'warn');
+    }
+  }
+  subscribe(topic, type, fn, opts = {}) {
+    let s = this.subs.get(topic);
+    if (!s) {
+      s = { type, listeners: new Set([fn]), id: 'sub_' + (++this.idc), throttle: opts.throttle || 0 };
+      this.subs.set(topic, s); this._sendSub(topic, s);
+    } else s.listeners.add(fn);
+    return () => this.unsubscribe(topic, fn);
+  }
+  _sendSub(topic, s) {
+    const o = { op: 'subscribe', id: s.id, topic, queue_length: 1, throttle_rate: s.throttle };
+    if (s.type) o.type = s.type;
+    this.send(o);
+  }
+  unsubscribe(topic, fn) {
+    const s = this.subs.get(topic);
+    if (!s) return;
+    s.listeners.delete(fn);
+    if (!s.listeners.size) { this.subs.delete(topic); this.send({ op: 'unsubscribe', id: s.id, topic }); }
+  }
+  call(service, args = {}, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+      if (!this.connected) return reject(new Error('not connected'));
+      const id = 'call_' + (++this.idc);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('timeout calling ' + service)); }, timeout);
+      this.pending.set(id, { resolve, reject, timer });
+      this.send({ op: 'call_service', id, service, args });
+    });
+  }
+  publish(topic, type, msg) {
+    if (!this.connected) return false;
+    const key = topic + '|' + type;
+    if (!this.advertised.has(key)) { this.send({ op: 'advertise', topic, type }); this.advertised.add(key); }
+    this.send({ op: 'publish', topic, msg });
+    return true;
+  }
+}
+const ros = new Ros();
+
+/* ============================== state ============================== */
+const state = {
+  robot: null, gen: 0, urdfText: null, files: new Map(),
+  jointSource: 'manual', unitsDeg: true, tab: 'topics',
+  topics: [], nodes: [], services: [], selected: null,
+  mesh: { total: 0, loaded: 0, missing: [] }, userMovedCamera: false
+};
+$('#wsUrl').value = store.get('ws', 'ws://localhost:9090');
+$('#meshBase').value = store.get('meshBase', '');
+$('#jsTopic').value = store.get('jsTopic', '/joint_states');
+$('#odomTopic').value = store.get('odomTopic', '/odom');
+$('#cmdTopic').value = store.get('cmdTopic', '/cmd_vel');
+$('#cmdType').value = store.get('cmdType', 'geometry_msgs/msg/Twist');
+
+/* ============================== three.js scene ============================== */
+const canvas = $('#three');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.up.set(0, 0, 1);
+camera.position.set(1.8, 1.6, 1.2);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.12; controls.target.set(0, 0, 0.3);
+controls.addEventListener('start', () => { state.userMovedCamera = true; });
+scene.add(new THREE.HemisphereLight(0xffffff, 0x50555e, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(3, 2, 6); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-3, -4, 2); scene.add(fill);
+const worldAxes = new THREE.AxesHelper(0.25); scene.add(worldAxes);
+const robotRoot = new THREE.Group(); scene.add(robotRoot);
+let grid = null;
+const collisionMat = new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.35, depthWrite: false });
+const missingMat = new THREE.MeshBasicMaterial({ color: 0xff3b3b, wireframe: true });
+
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function applyTheme() {
+  scene.background = new THREE.Color(cssVar('--vp-bg'));
+  const vis = grid ? grid.visible : true;
+  if (grid) scene.remove(grid);
+  grid = new THREE.GridHelper(10, 40, new THREE.Color(cssVar('--grid-major')).convertSRGBToLinear(), new THREE.Color(cssVar('--grid-minor')).convertSRGBToLinear());
+  grid.rotation.x = Math.PI / 2; grid.visible = vis; scene.add(grid);
+  scene.fog = new THREE.Fog(scene.background, fogNear, fogNear * 2.5);
+  plot.colors = { text: cssVar('--muted'), grid: cssVar('--border'), faint: cssVar('--faint') };
+}
+let fogNear = 6;
+const plot = { series: [], paused: false, pausedAt: 0, window: 30, colors: {} };
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+new ResizeObserver(() => {
+  const vp = $('#viewport'); const w = vp.clientWidth, h = vp.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}).observe($('#viewport'));
+
+/* ============================== URDF parsing ============================== */
+function kids(el, tag) { return Array.from(el.children).filter(c => c.tagName === tag); }
+function num3(s, d = [0, 0, 0]) {
+  if (!s) return d.slice();
+  const a = s.trim().split(/\s+/).map(Number);
+  if (a.length === 1 && isFinite(a[0])) return [a[0], a[0], a[0]];
+  return a.length >= 3 && a.slice(0, 3).every(isFinite) ? a.slice(0, 3) : d.slice();
+}
+function parseOrigin(el) {
+  const o = el ? kids(el, 'origin')[0] : null;
+  return { xyz: num3(o && o.getAttribute('xyz')), rpy: num3(o && o.getAttribute('rpy')) };
+}
+function parseColor(m) {
+  if (!m) return null;
+  const c = kids(m, 'color')[0];
+  if (!c) return null;
+  const a = (c.getAttribute('rgba') || '').trim().split(/\s+/).map(Number);
+  return a.length >= 3 && a.every(isFinite) ? [a[0], a[1], a[2], a.length > 3 ? a[3] : 1] : null;
+}
+function numAttr(el, name, d) { const v = parseFloat(el.getAttribute(name)); return isFinite(v) ? v : d; }
+function parseShape(el, materials) {
+  const g = kids(el, 'geometry')[0];
+  let geom = null;
+  const s = g && g.children[0];
+  if (s) {
+    const t = s.tagName;
+    if (t === 'box') geom = { type: 'box', size: num3(s.getAttribute('size'), [0.1, 0.1, 0.1]) };
+    else if (t === 'cylinder') geom = { type: 'cylinder', radius: numAttr(s, 'radius', 0.05), length: numAttr(s, 'length', 0.1) };
+    else if (t === 'sphere') geom = { type: 'sphere', radius: numAttr(s, 'radius', 0.05) };
+    else if (t === 'mesh') geom = { type: 'mesh', filename: s.getAttribute('filename') || '', scale: num3(s.getAttribute('scale'), [1, 1, 1]) };
+  }
+  const mEl = kids(el, 'material')[0];
+  const rgba = mEl ? (parseColor(mEl) || materials[mEl.getAttribute('name')] || null) : null;
+  return { origin: parseOrigin(el), geom, rgba };
+}
+function parseURDF(text) {
+  if (/<xacro:/.test(text) || /\$\{[^}]+\}/.test(text)) throw new Error('This looks like a xacro file. Run "xacro file.urdf.xacro > robot.urdf" and load the result.');
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const perr = doc.querySelector('parsererror');
+  if (perr) throw new Error('XML parse error: ' + perr.textContent.trim().slice(0, 160));
+  const robot = doc.documentElement;
+  if (robot.tagName !== 'robot') throw new Error('Root element is <' + robot.tagName + '>, expected <robot>.');
+  const materials = {};
+  for (const m of kids(robot, 'material')) { const c = parseColor(m); if (c) materials[m.getAttribute('name')] = c; }
+  const links = {}, joints = {};
+  for (const l of kids(robot, 'link')) {
+    const name = l.getAttribute('name');
+    links[name] = { name, visuals: kids(l, 'visual').map(v => parseShape(v, materials)), collisions: kids(l, 'collision').map(v => parseShape(v, materials)) };
+  }
+  for (const j of kids(robot, 'joint')) {
+    const name = j.getAttribute('name');
+    let type = j.getAttribute('type') || 'fixed';
+    const axisEl = kids(j, 'axis')[0];
+    const axis = new THREE.Vector3(...num3(axisEl && axisEl.getAttribute('xyz'), [1, 0, 0]));
+    if (axis.lengthSq() < 1e-12) axis.set(1, 0, 0);
+    axis.normalize();
+    const lim = kids(j, 'limit')[0];
+    const mim = kids(j, 'mimic')[0];
+    if (type === 'floating' || type === 'planar') { log(`Joint ${name} is ${type}; shown as fixed.`, 'warn'); type = 'fixed'; }
+    joints[name] = {
+      name, type,
+      parent: kids(j, 'parent')[0]?.getAttribute('link'),
+      child: kids(j, 'child')[0]?.getAttribute('link'),
+      origin: parseOrigin(j), axis,
+      lower: lim ? parseFloat(lim.getAttribute('lower')) : NaN,
+      upper: lim ? parseFloat(lim.getAttribute('upper')) : NaN,
+      velLimit: lim ? parseFloat(lim.getAttribute('velocity')) : NaN,
+      effLimit: lim ? parseFloat(lim.getAttribute('effort')) : NaN,
+      mimic: mim ? { joint: mim.getAttribute('joint'), multiplier: mim.hasAttribute('multiplier') ? +mim.getAttribute('multiplier') : 1, offset: +mim.getAttribute('offset') || 0 } : null
+    };
+  }
+  return { name: robot.getAttribute('name') || 'robot', links, joints };
+}
+
+/* ============================== meshes ============================== */
+const meshCache = new Map();
+function resolveMesh(fn) {
+  const path = fn.replace(/^(package|file|model):\/\//, '');
+  const parts = path.split('/').filter(Boolean);
+  if (state.files.size) {
+    for (let i = 0; i < parts.length; i++) {
+      const suf = parts.slice(i).join('/').toLowerCase();
+      for (const [k, f] of state.files) if (k === suf || k.endsWith('/' + suf)) return { kind: 'file', file: f, key: 'f:' + k };
+    }
+  }
+  if (/^https?:\/\//.test(fn)) return { kind: 'url', url: fn, key: 'u:' + fn };
+  const base = $('#meshBase').value.trim().replace(/\/+$/, '');
+  if (base) { const url = base + '/' + parts.join('/'); return { kind: 'url', url, key: 'u:' + url }; }
+  return null;
+}
+function parseMeshBuffer(buf, ext) {
+  if (ext === 'stl') return new THREE.STLLoader().parse(buf);
+  const text = new TextDecoder().decode(buf);
+  if (ext === 'dae') {
+    const dae = new THREE.ColladaLoader().parse(text, '');
+    const s = dae.scene;
+    const zup = /<up_axis>\s*Z_UP/i.test(text);
+    s.rotation.set(zup ? 0 : Math.PI / 2, 0, 0);
+    const wrap = new THREE.Group(); wrap.add(s); return wrap;
+  }
+  if (ext === 'obj') return new THREE.OBJLoader().parse(text);
+  throw new Error('unsupported mesh type .' + ext);
+}
+async function loadMeshInto(fn, mat, holder, linkName, gen) {
+  state.mesh.total++; updateMeshStatus();
+  try {
+    const src = resolveMesh(fn);
+    if (!src) throw new Error('not found');
+    const ext = (fn.split('.').pop() || '').toLowerCase();
+    let p = meshCache.get(src.key);
+    if (!p) {
+      p = (async () => {
+        let buf;
+        if (src.kind === 'file') buf = await src.file.arrayBuffer();
+        else { const r = await fetch(src.url); if (!r.ok) throw new Error('HTTP ' + r.status); buf = await r.arrayBuffer(); }
+        return parseMeshBuffer(buf, ext);
+      })();
+      meshCache.set(src.key, p);
+      p.catch(() => meshCache.delete(src.key));
+    }
+    const proto = await p;
+    if (gen !== state.gen) return;
+    let obj;
+    if (proto.isBufferGeometry) obj = new THREE.Mesh(proto, mat);
+    else {
+      obj = proto.clone(true);
+      if (ext === 'obj') obj.traverse(o => { if (o.isMesh) o.material = mat; });
+    }
+    obj.traverse(o => { if (o.isMesh) o.userData.linkName = linkName; });
+    holder.add(obj);
+    state.mesh.loaded++;
+  } catch (e) {
+    if (gen !== state.gen) return;
+    state.mesh.missing.push(fn);
+    const ph = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), missingMat);
+    const sc = holder.scale; ph.scale.set(1 / (sc.x || 1), 1 / (sc.y || 1), 1 / (sc.z || 1));
+    holder.add(ph);
+  }
+  updateMeshStatus(); scheduleFit();
+}
+function updateMeshStatus() {
+  const m = state.mesh, el = $('#meshStatus');
+  if (!m.total) { el.textContent = ''; return; }
+  const pending = m.total - m.loaded - m.missing.length;
+  let s = `Meshes: ${m.loaded} of ${m.total} loaded`;
+  if (pending > 0) s += `, ${pending} loading`;
+  el.className = 'hint' + (m.missing.length ? ' lv-warn' : '');
+  if (m.missing.length) {
+    s += `. ${m.missing.length} not found (shown as red boxes). Add the mesh folder or set a mesh server URL. First missing: ${m.missing[0]}`;
+  }
+  el.textContent = s;
+}
+
+/* ============================== robot build ============================== */
+function applyOrigin(obj, o) { obj.position.set(...o.xyz); obj.rotation.set(o.rpy[0], o.rpy[1], o.rpy[2], 'ZYX'); }
+function makeShape(v, isCol, linkName, gen) {
+  const holder = new THREE.Group(); applyOrigin(holder, v.origin);
+  holder.userData.linkName = linkName;
+  let mat = collisionMat;
+  if (!isCol) {
+    const c = v.rgba ? new THREE.Color(v.rgba[0], v.rgba[1], v.rgba[2]).convertSRGBToLinear() : new THREE.Color(0.62, 0.65, 0.7).convertSRGBToLinear();
+    const op = v.rgba ? v.rgba[3] : 1;
+    mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.15, transparent: op < 1, opacity: op, wireframe: $('#vWire').checked });
+  }
+  const g = v.geom;
+  if (!g) return holder;
+  let geo = null;
+  if (g.type === 'box') geo = new THREE.BoxGeometry(...g.size);
+  else if (g.type === 'cylinder') { geo = new THREE.CylinderGeometry(g.radius, g.radius, g.length, 36); geo.rotateX(Math.PI / 2); }
+  else if (g.type === 'sphere') geo = new THREE.SphereGeometry(g.radius, 32, 20);
+  if (geo && (g.type === 'box' ? g.size.every(x => x > 0) : g.radius > 0)) { const m = new THREE.Mesh(geo, mat); m.userData.linkName = linkName; holder.add(m); }
+  else if (g.type === 'mesh') { holder.scale.set(...g.scale); loadMeshInto(g.filename, mat, holder, linkName, gen); }
+  return holder;
+}
+function clearRobot() {
+  while (robotRoot.children.length) robotRoot.remove(robotRoot.children[0]);
+  robotRoot.position.set(0, 0, 0); robotRoot.quaternion.identity();
+  selectLink(null);
+  state.robot = null;
+}
+function buildRobot(model) {
+  clearRobot();
+  state.gen++; const gen = state.gen;
+  state.mesh = { total: 0, loaded: 0, missing: [] };
+  state.userMovedCamera = false;
+  const links = {};
+  for (const L of Object.values(model.links)) {
+    const obj = new THREE.Group(); obj.name = L.name; obj.userData.linkName = L.name;
+    const vis = new THREE.Group(), col = new THREE.Group();
+    vis.visible = $('#vVisual').checked; col.visible = $('#vCollision').checked;
+    L.visuals.forEach(v => vis.add(makeShape(v, false, L.name, gen)));
+    L.collisions.forEach(v => col.add(makeShape(v, true, L.name, gen)));
+    const ax = new THREE.AxesHelper(0.1); ax.visible = $('#vFrames').checked;
+    obj.add(vis, col, ax);
+    links[L.name] = { obj, vis, col, ax, data: L };
+  }
+  const joints = {}, childSet = new Set();
+  for (const J of Object.values(model.joints)) {
+    const p = links[J.parent], c = links[J.child];
+    if (!p || !c) { log(`Joint ${J.name} refers to a missing link and was skipped.`, 'warn'); continue; }
+    const jo = new THREE.Group(); applyOrigin(jo, J.origin);
+    const mo = new THREE.Group(); jo.add(mo); mo.add(c.obj); p.obj.add(jo);
+    childSet.add(J.child);
+    joints[J.name] = Object.assign({}, J, { obj: jo, motion: mo, value: 0, vel: undefined, eff: undefined, ui: null });
+  }
+  const roots = Object.keys(links).filter(n => !childSet.has(n));
+  roots.forEach(n => robotRoot.add(links[n].obj));
+  if (roots.length > 1) log(`${roots.length} root links (${roots.join(', ')}). A URDF normally has one.`, 'warn');
+  const followers = {};
+  for (const J of Object.values(joints)) if (J.mimic) (followers[J.mimic.joint] = followers[J.mimic.joint] || []).push(J);
+  const movable = Object.values(joints).filter(j => MOVABLE.has(j.type));
+  state.robot = { model, links, joints, roots, followers, movable };
+  for (const J of movable) if (!J.mimic) { const [lo, hi] = jointRange(J); setJoint(J.name, Math.min(hi, Math.max(lo, 0))); }
+  $('#robotName').textContent = model.name;
+  $('#robotStats').innerHTML = `<dt>Name</dt><dd>${esc(model.name)}</dd><dt>Links</dt><dd>${Object.keys(links).length}</dd><dt>Joints</dt><dd>${Object.keys(joints).length} (${movable.length} movable)</dd><dt>Root</dt><dd title="${esc(roots.join(', '))}">${esc(roots.join(', '))}</dd>`;
+  $('#emptyState').classList.add('hidden');
+  renderJointList(); updateMeshStatus(); fitCamera();
+  log(`Loaded ${model.name}: ${Object.keys(links).length} links, ${movable.length} movable joints.`, 'good');
+}
+function loadURDFText(text, source) {
+  try { const model = parseURDF(text); state.urdfText = text; buildRobot(model); }
+  catch (e) { log(`Could not load URDF from ${source}: ${e.message}`, 'bad'); }
+}
+
+/* ============================== joints ============================== */
+function jointRange(J) {
+  if (J.type === 'continuous') return [-Math.PI, Math.PI];
+  if (isFinite(J.lower) && isFinite(J.upper) && J.upper > J.lower) return [J.lower, J.upper];
+  return J.type === 'prismatic' ? [-0.5, 0.5] : [-Math.PI, Math.PI];
+}
+function applyJoint(J, v) {
+  if (!isFinite(v)) return;
+  if (J.type === 'revolute' || J.type === 'continuous') J.motion.quaternion.setFromAxisAngle(J.axis, v);
+  else if (J.type === 'prismatic') J.motion.position.copy(J.axis).multiplyScalar(v);
+  else return;
+  J.value = v;
+}
+function setJoint(name, v, depth = 0) {
+  const R = state.robot; if (!R || depth > 8) return;
+  const J = R.joints[name]; if (!J) return;
+  applyJoint(J, v);
+  const f = R.followers[name];
+  if (f) for (const F of f) setJoint(F.name, F.mimic.multiplier * v + F.mimic.offset, depth + 1);
+}
+function fmtJ(J, v) {
+  if (v === undefined || !isFinite(v)) return '–';
+  if (J.type === 'prismatic') return v.toFixed(3) + ' m';
+  return state.unitsDeg ? (v * 180 / Math.PI).toFixed(1) + '°' : v.toFixed(3);
+}
+function renderJointList() {
+  const list = $('#jointList'); list.innerHTML = '';
+  const R = state.robot;
+  if (!R || !R.movable.length) { list.innerHTML = `<p class="empty">${R ? 'This robot has no movable joints.' : 'Load a robot to see its joints.'}</p>`; $('#jointCount').textContent = '0'; return; }
+  $('#jointCount').textContent = R.movable.length;
+  for (const J of R.movable) {
+    const [lo, hi] = jointRange(J);
+    const row = document.createElement('div');
+    row.className = 'joint' + (J.mimic ? ' mimic' : '');
+    const tip = `${J.name} (${J.type})${J.mimic ? `, mimics ${J.mimic.joint}` : ''}${isFinite(J.velLimit) ? `, max vel ${J.velLimit}` : ''}${isFinite(J.effLimit) ? `, max effort ${J.effLimit}` : ''}`;
+    row.innerHTML = `<div class="jtop"><button class="jname" title="${esc(tip)}">${esc(J.name)}</button><span class="tag">${J.mimic ? 'mimic' : J.type === 'continuous' ? 'cont' : J.type === 'prismatic' ? 'prism' : 'rev'}</span><span class="jval"></span><button class="icon" title="Plot this joint" aria-label="Plot ${esc(J.name)}">⌁</button></div>
+      <input type="range" min="${lo}" max="${hi}" step="${(hi - lo) / 2000}" aria-label="${esc(J.name)}">
+      <div class="jsub"><span>${fmtJ(J, lo)}</span><span class="jx"></span><span>${fmtJ(J, hi)}</span></div>`;
+    const slider = row.querySelector('input');
+    J.ui = { val: row.querySelector('.jval'), slider, extra: row.querySelector('.jx'), shown: NaN, extraShown: '', dragging: false };
+    slider.value = J.value;
+    slider.disabled = !!J.mimic || state.jointSource !== 'manual';
+    slider.addEventListener('input', () => { if (state.jointSource === 'manual') setJoint(J.name, +slider.value); });
+    slider.addEventListener('pointerdown', () => J.ui.dragging = true);
+    slider.addEventListener('pointerup', () => J.ui.dragging = false);
+    row.querySelector('.jname').onclick = () => selectLink(J.child);
+    row.querySelector('.icon').onclick = () => addSeries('__joint__', null, J.name);
+    list.appendChild(row);
+  }
+}
+function updateJointUI() {
+  const R = state.robot; if (!R) return;
+  for (const J of R.movable) {
+    const u = J.ui; if (!u) continue;
+    if (J.value !== u.shown) { u.shown = J.value; u.val.textContent = fmtJ(J, J.value); if (!u.dragging) u.slider.value = J.value; }
+    let x = '';
+    if (state.jointSource === 'live' && (J.vel !== undefined || J.eff !== undefined)) {
+      x = (J.vel !== undefined ? 'v ' + fmtNum(+J.vel.toFixed(3)) : '') + (J.eff !== undefined ? '  τ ' + fmtNum(+J.eff.toFixed(3)) : '');
+    }
+    if (x !== u.extraShown) { u.extraShown = x; u.extra.textContent = x; }
+  }
+}
+let jsUnsub = null; const jsTimes = []; const unknownJoints = new Set();
+function onJointStates(m) {
+  jsTimes.push(performance.now());
+  const R = state.robot; if (!R || !m.name) return;
+  const fresh = [];
+  for (let i = 0; i < m.name.length; i++) {
+    const J = R.joints[m.name[i]];
+    if (!J) { if (!unknownJoints.has(m.name[i])) { unknownJoints.add(m.name[i]); fresh.push(m.name[i]); } continue; }
+    if (m.position && i < m.position.length) setJoint(J.name, m.position[i]);
+    J.vel = m.velocity && i < m.velocity.length ? m.velocity[i] : undefined;
+    J.eff = m.effort && i < m.effort.length ? m.effort[i] : undefined;
+  }
+  if (fresh.length) log(`joint_states has joints that are not in the URDF: ${fresh.slice(0, 6).join(', ')}${fresh.length > 6 ? '…' : ''}`, 'warn');
+}
+function setJointSource(src) {
+  if (jsUnsub) { jsUnsub(); jsUnsub = null; }
+  state.jointSource = src;
+  $$('#jointSrc button').forEach(b => b.classList.toggle('on', b.dataset.src === src));
+  if (src === 'live') {
+    unknownJoints.clear();
+    if (!ros.connected) log('Not connected yet. Joint states will stream once rosbridge connects.', 'warn');
+    jsUnsub = ros.subscribe($('#jsTopic').value.trim(), 'sensor_msgs/msg/JointState', onJointStates);
+  }
+  const R = state.robot;
+  if (R) for (const J of R.movable) if (J.ui) J.ui.slider.disabled = !!J.mimic || src !== 'manual';
+}
+$$('#jointSrc button').forEach(b => b.onclick = () => setJointSource(b.dataset.src));
+$('#jsTopic').addEventListener('change', () => { store.set('jsTopic', $('#jsTopic').value.trim()); if (state.jointSource === 'live') setJointSource('live'); });
+$$('#units button').forEach(b => b.onclick = () => {
+  state.unitsDeg = b.dataset.u === 'deg';
+  $$('#units button').forEach(x => x.classList.toggle('on', x === b));
+  renderJointList();
+});
+$('#btnZero').onclick = () => {
+  const R = state.robot; if (!R) return;
+  if (state.jointSource !== 'manual') setJointSource('manual');
+  for (const J of R.movable) if (!J.mimic) { const [lo, hi] = jointRange(J); setJoint(J.name, Math.min(hi, Math.max(lo, 0))); }
+};
+function simulate(t) {
+  const R = state.robot; if (!R) return;
+  let i = 0;
+  for (const J of R.movable) {
+    if (J.mimic) continue; i++;
+    if (J.type === 'continuous') { setJoint(J.name, ((t * 1.2) % (Math.PI * 2)) - Math.PI); continue; }
+    const [lo, hi] = jointRange(J);
+    setJoint(J.name, (lo + hi) / 2 + (hi - lo) / 2 * 0.6 * Math.sin(t * (0.5 + 0.13 * i) + i));
+  }
+}
+
+/* ============================== camera, view, selection ============================== */
+function robotBox() {
+  robotRoot.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  if (state.robot) for (const L of Object.values(state.robot.links)) box.expandByObject(L.vis);
+  return box;
+}
+function fitCamera(top = false) {
+  const box = robotBox();
+  if (box.isEmpty()) return;
+  const size = Math.max(box.getSize(new THREE.Vector3()).length(), 0.05);
+  const c = box.getCenter(new THREE.Vector3());
+  const d = size * 1.25 + 0.05;
+  controls.target.copy(c);
+  if (top) camera.position.set(c.x, c.y - d * 0.01, c.z + d * 1.4);
+  else camera.position.copy(c).add(new THREE.Vector3(d * 0.85, d * 0.75, d * 0.55));
+  camera.near = Math.max(size / 500, 0.005); camera.far = size * 200 + 50;
+  fogNear = Math.max(d * 4, 4); if (scene.fog) { scene.fog.near = fogNear; scene.fog.far = fogNear * 2.5; }
+  if (grid) grid.scale.setScalar(Math.max(1, Math.pow(10, Math.floor(Math.log10(size))))); camera.updateProjectionMatrix();
+  const frameScale = Math.max(size * 0.06, 0.02) / 0.1;
+  if (state.robot) for (const L of Object.values(state.robot.links)) L.ax.scale.setScalar(frameScale);
+  worldAxes.scale.setScalar(Math.max(size * 0.15, 0.05) / 0.25);
+}
+let fitTimer = null;
+function scheduleFit() { clearTimeout(fitTimer); fitTimer = setTimeout(() => { if (!state.userMovedCamera) fitCamera(); }, 250); }
+$('#btnFit').onclick = () => fitCamera();
+$('#btnTop').onclick = () => fitCamera(true);
+$('#btnShot').onclick = () => {
+  const a = document.createElement('a');
+  a.download = (state.robot ? state.robot.model.name : 'robot') + '.png';
+  renderer.render(scene, camera); a.href = canvas.toDataURL('image/png'); a.click();
+};
+function eachLink(fn) { if (state.robot) for (const L of Object.values(state.robot.links)) fn(L); }
+$('#vVisual').onchange = e => eachLink(L => L.vis.visible = e.target.checked);
+$('#vCollision').onchange = e => eachLink(L => L.col.visible = e.target.checked);
+$('#vFrames').onchange = e => eachLink(L => L.ax.visible = e.target.checked);
+$('#vGrid').onchange = e => { grid.visible = e.target.checked; worldAxes.visible = e.target.checked; };
+$('#vWire').onchange = e => eachLink(L => L.vis.traverse(o => { if (o.isMesh) [].concat(o.material).forEach(m => { m.wireframe = e.target.checked; }); }));
+
+let selBox = null;
+function selectLink(name) {
+  if (selBox) { scene.remove(selBox); selBox = null; }
+  state.selected = name;
+  const L = name && state.robot && state.robot.links[name];
+  if (!L) { $('#selInfo').classList.add('hidden'); return; }
+  selBox = new THREE.BoxHelper(L.vis, new THREE.Color(cssVar('--sel')));
+  scene.add(selBox);
+  renderSelInfo();
+  $('#selInfo').classList.remove('hidden');
+}
+function renderSelInfo() {
+  const name = state.selected, R = state.robot;
+  if (!name || !R || !R.links[name]) return;
+  const L = R.links[name];
+  const pj = Object.values(R.joints).find(j => j.child === name);
+  const cj = Object.values(R.joints).filter(j => j.parent === name);
+  const p = new THREE.Vector3(); L.obj.getWorldPosition(p);
+  const q = new THREE.Quaternion(); L.obj.getWorldQuaternion(q);
+  const e = new THREE.Euler().setFromQuaternion(q, 'ZYX');
+  const f = v => v.toFixed(3);
+  $('#selInfo').innerHTML = `<h4>${esc(name)}<button class="icon" id="selClose" aria-label="Close">✕</button></h4>
+    <dl class="stats">
+      <dt>Parent joint</dt><dd>${pj ? esc(pj.name) + ' (' + pj.type + ')' : 'none (root)'}</dd>
+      ${pj && MOVABLE.has(pj.type) ? `<dt>Joint value</dt><dd>${fmtJ(pj, pj.value)}</dd>` : ''}
+      <dt>Child joints</dt><dd title="${esc(cj.map(j => j.name).join(', '))}">${cj.length ? esc(cj.map(j => j.name).join(', ')) : 'none'}</dd>
+      <dt>Position</dt><dd>${f(p.x)}, ${f(p.y)}, ${f(p.z)}</dd>
+      <dt>RPY</dt><dd>${f(e.x)}, ${f(e.y)}, ${f(e.z)}</dd>
+      <dt>Shapes</dt><dd>${L.data.visuals.length} visual, ${L.data.collisions.length} collision</dd>
+    </dl>`;
+  $('#selClose').onclick = () => selectLink(null);
+}
+const ray = new THREE.Raycaster(); let downPos = null;
+canvas.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerup', e => {
+  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 4 || !state.robot) return;
+  const r = canvas.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), camera);
+  const hits = ray.intersectObject(robotRoot, true).filter(h => {
+    if (!h.object.isMesh) return false;
+    for (let o = h.object; o; o = o.parent) if (!o.visible) return false;
+    return true;
+  });
+  const hit = hits[0];
+  let name = null;
+  if (hit) for (let o = hit.object; o; o = o.parent) if (o.userData.linkName) { name = o.userData.linkName; break; }
+  selectLink(name);
+});
+
+/* ============================== odometry ============================== */
+let odomUnsub = null; const lastOdom = new THREE.Vector3();
+function setOdom(on) {
+  if (odomUnsub) { odomUnsub(); odomUnsub = null; }
+  if (!on) { robotRoot.position.set(0, 0, 0); robotRoot.quaternion.identity(); return; }
+  let first = true;
+  odomUnsub = ros.subscribe($('#odomTopic').value.trim(), 'nav_msgs/msg/Odometry', m => {
+    const p = m.pose.pose.position, o = m.pose.pose.orientation;
+    robotRoot.position.set(p.x, p.y, p.z); robotRoot.quaternion.set(o.x, o.y, o.z, o.w);
+    if (!first) { const d = robotRoot.position.clone().sub(lastOdom); camera.position.add(d); controls.target.add(d); }
+    first = false; lastOdom.copy(robotRoot.position);
+  }, { throttle: 30 });
+}
+$('#vOdom').onchange = e => setOdom(e.target.checked);
+$('#odomTopic').addEventListener('change', () => { store.set('odomTopic', $('#odomTopic').value.trim()); if ($('#vOdom').checked) setOdom(true); });
+
+/* ============================== loading ============================== */
+async function handleFiles(entries) {
+  let urdf = null, meshes = 0;
+  for (const { path, file } of entries) {
+    const lower = path.toLowerCase();
+    if (/\.(urdf)$/.test(lower) || (/\.xml$/.test(lower) && !urdf)) { if (!urdf || /\.urdf$/.test(lower)) urdf = file; }
+    else if (/\.xacro$/.test(lower)) log(`${file.name} is a xacro file. Convert it with: xacro ${file.name} > robot.urdf`, 'warn');
+    else if (/\.(stl|dae|obj)$/.test(lower)) { state.files.set(lower, file); meshes++; }
+  }
+  if (meshes) log(`Added ${meshes} mesh files.`, 'good');
+  if (urdf) loadURDFText(await urdf.text(), urdf.name);
+  else if (meshes && state.urdfText) { meshCache.clear(); loadURDFText(state.urdfText, 'previous URDF'); }
+}
+$('#fileUrdf').onchange = e => { const f = e.target.files[0]; if (f) handleFiles([{ path: f.name, file: f }]); e.target.value = ''; };
+$('#fileMeshes').onchange = e => { handleFiles(Array.from(e.target.files).map(f => ({ path: f.webkitRelativePath || f.name, file: f }))); e.target.value = ''; };
+async function walkEntry(entry, out) {
+  if (entry.isFile) { const file = await new Promise((res, rej) => entry.file(res, rej)); out.push({ path: entry.fullPath.replace(/^\//, ''), file }); }
+  else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const c of batch) await walkEntry(c, out);
+    }
+  }
+}
+let dragDepth = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+  const roots = Array.from(e.dataTransfer.items || []).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const out = [];
+  if (roots.length) { for (const r of roots) await walkEntry(r, out); }
+  else for (const f of e.dataTransfer.files) out.push({ path: f.name, file: f });
+  handleFiles(out);
+});
+$('#meshBase').addEventListener('change', () => {
+  store.set('meshBase', $('#meshBase').value.trim());
+  if (state.urdfText) { meshCache.clear(); loadURDFText(state.urdfText, 'previous URDF'); }
+});
+async function loadFromRos() {
+  if (!ros.connected) { log('Connect to rosbridge first.', 'warn'); return; }
+  log('Requesting robot_description…');
+  let xml = null;
+  try {
+    xml = await new Promise((res, rej) => {
+      let un = null;
+      const t = setTimeout(() => { if (un) un(); rej(new Error('timeout')); }, 3000);
+      un = ros.subscribe('/robot_description', 'std_msgs/msg/String', m => { clearTimeout(t); un(); res(m.data); });
+    });
+  } catch {
+    try {
+      const r = await ros.call('/robot_state_publisher/get_parameters', { names: ['robot_description'] });
+      xml = r && r.values && r.values[0] && r.values[0].string_value;
+    } catch (e) { /* handled below */ }
+  }
+  if (!xml) { log('No robot_description found on the topic or on robot_state_publisher. Is robot_state_publisher running?', 'bad'); return; }
+  loadURDFText(xml, 'robot_description');
+  if (state.mesh.total && !state.files.size && !$('#meshBase').value.trim())
+    log('The model references mesh files. Add the description package folder or set a mesh server URL to see them.', 'warn');
+}
+$('#btnFromRos').onclick = loadFromRos;
+
+/* ============================== demo robot ============================== */
+function demoURDF() {
+  const wheel = (n, x, y) => `
+  <joint name="wheel_${n}_joint" type="continuous"><parent link="base_link"/><child link="wheel_${n}"/><origin xyz="${x} ${y} -0.06"/><axis xyz="0 1 0"/></joint>
+  <link name="wheel_${n}">
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.08" length="0.05"/></geometry><material name="tire"/></visual>
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.035" length="0.054"/></geometry><material name="metal"/></visual>
+    <collision><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.08" length="0.05"/></geometry></collision>
+  </link>`;
+  return `<?xml version="1.0"?>
+<robot name="demo_rover">
+  <material name="body"><color rgba="0.22 0.27 0.34 1"/></material>
+  <material name="amber"><color rgba="0.93 0.62 0.12 1"/></material>
+  <material name="tire"><color rgba="0.09 0.09 0.1 1"/></material>
+  <material name="metal"><color rgba="0.74 0.77 0.8 1"/></material>
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed"><parent link="base_footprint"/><child link="base_link"/><origin xyz="0 0 0.14"/></joint>
+  <link name="base_link">
+    <visual><geometry><box size="0.6 0.4 0.14"/></geometry><material name="body"/></visual>
+    <visual><origin xyz="0 0 0.072"/><geometry><box size="0.56 0.36 0.006"/></geometry><material name="amber"/></visual>
+    <collision><geometry><box size="0.6 0.4 0.14"/></geometry></collision>
+  </link>
+  ${wheel('fl', 0.2, 0.23)}${wheel('fr', 0.2, -0.23)}${wheel('rl', -0.2, 0.23)}${wheel('rr', -0.2, -0.23)}
+  <joint name="lidar_joint" type="fixed"><parent link="base_link"/><child link="lidar_link"/><origin xyz="0.21 0 0.105"/></joint>
+  <link name="lidar_link"><visual><geometry><cylinder radius="0.04" length="0.06"/></geometry><material name="metal"/></visual></link>
+  <joint name="shoulder_yaw" type="revolute"><parent link="base_link"/><child link="turret"/><origin xyz="-0.08 0 0.075"/><axis xyz="0 0 1"/><limit lower="-2.9" upper="2.9" effort="40" velocity="1.5"/></joint>
+  <link name="turret"><visual><origin xyz="0 0 0.03"/><geometry><cylinder radius="0.07" length="0.06"/></geometry><material name="amber"/></visual></link>
+  <joint name="shoulder_pitch" type="revolute"><parent link="turret"/><child link="upper_arm"/><origin xyz="0 0 0.07"/><axis xyz="0 1 0"/><limit lower="-1.6" upper="1.6" effort="40" velocity="1.5"/></joint>
+  <link name="upper_arm">
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.045" length="0.09"/></geometry><material name="body"/></visual>
+    <visual><origin xyz="0 0 0.18"/><geometry><box size="0.06 0.06 0.36"/></geometry><material name="metal"/></visual>
+  </link>
+  <joint name="elbow" type="revolute"><parent link="upper_arm"/><child link="forearm"/><origin xyz="0 0 0.36"/><axis xyz="0 1 0"/><limit lower="-2.4" upper="2.4" effort="25" velocity="2"/></joint>
+  <link name="forearm">
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.04" length="0.08"/></geometry><material name="body"/></visual>
+    <visual><origin xyz="0 0 0.15"/><geometry><box size="0.05 0.05 0.3"/></geometry><material name="metal"/></visual>
+  </link>
+  <joint name="wrist_pitch" type="revolute"><parent link="forearm"/><child link="wrist"/><origin xyz="0 0 0.3"/><axis xyz="0 1 0"/><limit lower="-1.8" upper="1.8" effort="10" velocity="2.5"/></joint>
+  <link name="wrist"><visual><origin xyz="0 0 0.025"/><geometry><box size="0.08 0.1 0.05"/></geometry><material name="amber"/></visual></link>
+  <joint name="wrist_roll" type="revolute"><parent link="wrist"/><child link="gripper_base"/><origin xyz="0 0 0.05"/><axis xyz="0 0 1"/><limit lower="-3.1" upper="3.1" effort="10" velocity="3"/></joint>
+  <link name="gripper_base"><visual><origin xyz="0 0 0.015"/><geometry><box size="0.04 0.12 0.03"/></geometry><material name="body"/></visual></link>
+  <joint name="finger_left" type="prismatic"><parent link="gripper_base"/><child link="finger_l"/><origin xyz="0 0.01 0.03"/><axis xyz="0 1 0"/><limit lower="0" upper="0.04" effort="20" velocity="0.1"/></joint>
+  <link name="finger_l"><visual><origin xyz="0 0 0.035"/><geometry><box size="0.02 0.015 0.07"/></geometry><material name="metal"/></visual></link>
+  <joint name="finger_right" type="prismatic"><parent link="gripper_base"/><child link="finger_r"/><origin xyz="0 -0.01 0.03"/><axis xyz="0 -1 0"/><limit lower="0" upper="0.04" effort="20" velocity="0.1"/><mimic joint="finger_left" multiplier="1" offset="0"/></joint>
+  <link name="finger_r"><visual><origin xyz="0 0 0.035"/><geometry><box size="0.02 0.015 0.07"/></geometry><material name="metal"/></visual></link>
+</robot>`;
+}
+const loadDemo = () => loadURDFText(demoURDF(), 'demo');
+$('#btnDemo').onclick = loadDemo; $('#btnDemo2').onclick = loadDemo;
+
+/* ============================== ROS graph + inspector ============================== */
+async function refreshGraph() {
+  if (!ros.connected) { log('Connect to rosbridge first.', 'warn'); return; }
+  try {
+    const r = await ros.call('/rosapi/topics');
+    state.topics = (r.topics || []).map((t, i) => ({ name: t, type: (r.types || [])[i] || '' })).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (e) { log('Could not list topics (' + e.message + '). rosapi starts with rosbridge_websocket_launch.xml.', 'bad'); }
+  try { state.nodes = ((await ros.call('/rosapi/nodes')).nodes || []).sort(); } catch {}
+  try { state.services = ((await ros.call('/rosapi/services')).services || []).sort(); } catch {}
+  $('#nTopics').textContent = state.topics.length || '';
+  $('#nNodes').textContent = state.nodes.length || '';
+  $('#nServices').textContent = state.services.length || '';
+  renderGraphList();
+  const js = $('#jsTopic').value.trim();
+  if (state.jointSource === 'manual' && state.topics.some(t => t.name === js)) log(`${js} is available. Switch Joints to Live to follow the real robot.`);
+}
+function typeOf(topic) { const t = state.topics.find(x => x.name === topic); return t ? t.type : ''; }
+function renderGraphList() {
+  const f = $('#graphFilter').value.trim().toLowerCase();
+  let items;
+  if (state.tab === 'topics') items = state.topics.map(t => ({ name: t.name, sub: shortType(t.type) }));
+  else if (state.tab === 'nodes') items = state.nodes.map(n => ({ name: n }));
+  else items = state.services.map(s => ({ name: s }));
+  items = items.filter(i => !f || i.name.toLowerCase().includes(f) || (i.sub || '').toLowerCase().includes(f));
+  const cur = insp && insp.name;
+  $('#graphList').innerHTML = items.length
+    ? items.map(i => `<li data-name="${esc(i.name)}" class="${i.name === cur ? 'on' : ''}"><span class="tn">${esc(i.name)}</span>${i.sub ? `<span class="tt">${esc(i.sub)}</span>` : ''}</li>`).join('')
+    : `<li class="empty">${ros.connected ? (f ? 'Nothing matches the filter.' : 'Nothing listed. Press Refresh.') : 'Connect to rosbridge to list ' + state.tab + '.'}</li>`;
+}
+$('#graphList').onclick = e => {
+  const li = e.target.closest('li[data-name]'); if (!li) return;
+  const n = li.dataset.name;
+  if (state.tab === 'topics') inspectTopic(n, typeOf(n));
+  else if (state.tab === 'nodes') inspectNode(n);
+  else inspectService(n);
+};
+$$('#tabs button').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); renderGraphList(); });
+$('#graphFilter').oninput = renderGraphList;
+$('#btnRefresh').onclick = refreshGraph;
+
+let insp = null;
+const HEAVY = /PointCloud2|\/Image$|CompressedImage|OccupancyGrid|LaserScan|MarkerArray|Mesh/;
+function closeInspector() { if (insp && insp.unsub) insp.unsub(); insp = null; }
+function inspectTopic(name, type) {
+  closeInspector();
+  const heavy = HEAVY.test(type);
+  insp = { kind: 'topic', name, type, heavy, last: null, times: [], dirty: true, paused: false, shape: null };
+  insp.unsub = ros.subscribe(name, type || undefined, m => { insp.last = m; insp.times.push(performance.now()); insp.dirty = true; }, { throttle: heavy ? 500 : 0 });
+  $('#ihead').innerHTML = `<div class="t">${esc(name)}</div><div class="meta"><span>${esc(shortType(type) || 'unknown type')}</span><span class="hz" id="ihz">waiting…</span><span class="sp"></span><button class="btn small" id="iPause">Pause</button><button class="btn small" id="iCopy">Copy JSON</button></div>`;
+  $('#ibody').innerHTML = '<span class="m">Waiting for the first message…</span>';
+  $('#iPause').onclick = () => { insp.paused = !insp.paused; $('#iPause').textContent = insp.paused ? 'Resume' : 'Pause'; };
+  $('#iCopy').onclick = async () => {
+    if (!insp.last) return;
+    try { await navigator.clipboard.writeText(JSON.stringify(insp.last, null, 2)); log('Copied message to the clipboard.', 'good'); }
+    catch { log('The browser blocked clipboard access.', 'warn'); }
+  };
+  renderGraphList();
+}
+async function inspectNode(name) {
+  closeInspector(); insp = { kind: 'node', name }; renderGraphList();
+  $('#ihead').innerHTML = `<div class="t">${esc(name)}</div><div class="meta">Node</div>`;
+  $('#ibody').innerHTML = '<span class="m">Loading…</span>';
+  try {
+    const d = await ros.call('/rosapi/node_details', { node: name });
+    const sec = (title, arr, click) => `<div class="ih">${title} (${(arr || []).length})</div><ul class="ilist">${(arr || []).map(x => `<li ${click ? `data-topic="${esc(x)}"` : 'style="cursor:default;color:var(--text)"'}>${esc(x)}</li>`).join('') || '<span class="m">none</span>'}</ul>`;
+    $('#ibody').innerHTML = sec('Publishes', d.publishing, true) + sec('Subscribes', d.subscribing, true) + sec('Services', d.services, false);
+    $$('#ibody li[data-topic]').forEach(li => li.onclick = () => inspectTopic(li.dataset.topic, typeOf(li.dataset.topic)));
+  } catch (e) { $('#ibody').innerHTML = `<span class="lv-bad">${esc(e.message)}</span>`; }
+}
+async function inspectService(name) {
+  closeInspector(); insp = { kind: 'service', name }; renderGraphList();
+  $('#ihead').innerHTML = `<div class="t">${esc(name)}</div><div class="meta">Service</div>`;
+  try { const r = await ros.call('/rosapi/service_type', { service: name }); $('#ibody').innerHTML = `<div class="ih">Type</div>${esc(r.type || 'unknown')}`; }
+  catch (e) { $('#ibody').innerHTML = `<span class="lv-bad">${esc(e.message)}</span>`; }
+}
+function strText(v) { return '"' + esc(v.length > 160 ? v.slice(0, 160) + '…' : v) + '"' + (v.length > 160 ? ` (${v.length} chars)` : ''); }
+function shapeKey(v, depth = 0) {
+  if (v === null || typeof v !== 'object') return typeof v;
+  if (depth > 12) return '…';
+  if (Array.isArray(v)) return '[' + v.length + ':' + v.slice(0, 20).map(x => shapeKey(x, depth + 1)).join(',') + ']';
+  return '{' + Object.keys(v).map(k => k + ':' + shapeKey(v[k], depth + 1)).join(',') + '}';
+}
+function renderVal(v, path) {
+  if (v === null || v === undefined) return '<span class="n">null</span>';
+  if (typeof v === 'number') return `<span class="num" data-path="${esc(path)}" title="Plot ${esc(path)}">${fmtNum(v)}</span>`;
+  if (typeof v === 'boolean') return `<span class="b" data-path="${esc(path)}">${v}</span>`;
+  if (typeof v === 'string') return `<span class="s" data-path="${esc(path)}">${strText(v)}</span>`;
+  if (Array.isArray(v)) {
+    if (!v.length) return '<span class="m">[]</span>';
+    if (v.every(x => typeof x === 'number')) {
+      const n = Math.min(v.length, 24);
+      return `<span class="m">[${v.length}]</span> ` + v.slice(0, n).map((x, i) => renderVal(x, `${path}[${i}]`)).join(', ') + (v.length > n ? ` <span class="m">… ${v.length - n} more</span>` : '');
+    }
+    const n = Math.min(v.length, 20);
+    let s = `<span class="m">[${v.length}]</span><div class="ind">`;
+    for (let i = 0; i < n; i++) s += `<div><span class="k">${i}:</span> ${renderVal(v[i], `${path}[${i}]`)}</div>`;
+    if (v.length > n) s += `<div class="m">… ${v.length - n} more</div>`;
+    return s + '</div>';
+  }
+  let s = '<div class="ind">';
+  for (const k of Object.keys(v)) s += `<div><span class="k">${esc(k)}:</span> ${renderVal(v[k], path ? path + '.' + k : k)}</div>`;
+  return s + '</div>';
+}
+$('#ibody').addEventListener('click', e => {
+  const n = e.target.closest('.num');
+  if (n && insp && insp.kind === 'topic') addSeries(insp.name, insp.type, n.dataset.path);
+});
+setInterval(() => {
+  if (!insp || insp.kind !== 'topic') return;
+  const now = performance.now();
+  while (insp.times.length && insp.times[0] < now - 3000) insp.times.shift();
+  const hz = $('#ihz');
+  if (hz) {
+    const t = insp.times;
+    const rate = t.length > 1 ? (t.length - 1) / ((t[t.length - 1] - t[0]) / 1000) : 0;
+    hz.textContent = !t.length ? (insp.last ? 'no messages in 3 s' : 'waiting…') : `${rate.toFixed(1)} Hz${insp.heavy ? ' (throttled to 2 Hz)' : ''}`;
+  }
+  if (insp.dirty && !insp.paused && insp.last) {
+    insp.dirty = false;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && $('#ibody').contains(sel.anchorNode)) return;
+    const key = shapeKey(insp.last), body = $('#ibody');
+    if (key !== insp.shape) {
+      insp.shape = key;
+      body.innerHTML = renderVal(insp.last, '').replace(/^<div class="ind">/, '<div>');
+    } else {
+      for (const el of body.querySelectorAll('[data-path]')) {
+        const v = getPath(insp.last, el.dataset.path);
+        const t = typeof v === 'number' ? fmtNum(v) : typeof v === 'string' ? null : String(v);
+        if (t === null) { const h = strText(v); if (el.innerHTML !== h) el.innerHTML = h; }
+        else if (el.textContent !== t) el.textContent = t;
+      }
+    }
+  }
+}, 125);
+
+/* ============================== plot ============================== */
+function addSeries(topic, type, path) {
+  if (plot.series.some(s => s.topic === topic && s.path === path)) return;
+  if (plot.series.length >= 8) { log('Up to 8 series can be plotted at once. Remove one first.', 'warn'); return; }
+  const used = new Set(plot.series.map(s => s.color));
+  const color = PALETTE.find(c => !used.has(c)) || PALETTE[0];
+  const s = { topic, path, color, data: [], label: topic === '__joint__' ? path : `${topic.split('/').pop()}.${path}`, last: NaN };
+  if (topic !== '__joint__') {
+    s.unsub = ros.subscribe(topic, type || typeOf(topic) || undefined, m => { const v = getPath(m, path); if (typeof v === 'number') pushPoint(s, v); }, { throttle: HEAVY.test(type || '') ? 500 : 0 });
+  }
+  plot.series.push(s); renderLegend();
+}
+function pushPoint(s, v) {
+  const t = performance.now();
+  s.data.push([t, v]); s.last = v;
+  while (s.data.length && s.data[0][0] < t - 125000) s.data.shift();
+}
+function removeSeries(i) { const s = plot.series[i]; if (s.unsub) s.unsub(); plot.series.splice(i, 1); renderLegend(); }
+function renderLegend() {
+  $('#plotLegend').innerHTML = plot.series.map((s, i) => `<span class="chip" title="${esc(s.topic === '__joint__' ? 'joint ' + s.path : s.topic + ' → ' + s.path)}"><i style="background:${s.color}"></i>${esc(s.label)} <b data-i="${i}">${fmtNum(s.last)}</b><button class="icon" data-rm="${i}" aria-label="Remove">✕</button></span>`).join('');
+}
+$('#plotLegend').onclick = e => { const b = e.target.closest('[data-rm]'); if (b) removeSeries(+b.dataset.rm); };
+setInterval(() => { $$('#plotLegend b').forEach(b => { const s = plot.series[+b.dataset.i]; if (s) b.textContent = isFinite(s.last) ? fmtNum(+s.last.toPrecision(5)) : '–'; }); }, 200);
+$('#plotWindow').onchange = e => plot.window = +e.target.value;
+$('#btnPause').onclick = () => { plot.paused = !plot.paused; plot.pausedAt = performance.now(); $('#btnPause').textContent = plot.paused ? 'Resume' : 'Pause'; };
+$('#btnClearPlot').onclick = () => { while (plot.series.length) removeSeries(0); };
+let lastJointSample = 0;
+function sampleJoints(now) {
+  if (now - lastJointSample < 30 || !state.robot) return;
+  lastJointSample = now;
+  for (const s of plot.series) if (s.topic === '__joint__') { const J = state.robot.joints[s.path]; if (J) pushPoint(s, J.value); }
+}
+function drawPlot(now) {
+  const c = $('#plot'), w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  const dpr = devicePixelRatio || 1;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  if (!plot.series.length) {
+    ctx.fillStyle = plot.colors.text; ctx.textAlign = 'center';
+    ctx.fillText('Click a number in the topic inspector, or ⌁ next to a joint, to plot it here.', w / 2, h / 2);
+    return;
+  }
+  const tNow = plot.paused ? plot.pausedAt : now, win = plot.window * 1000, t0 = tNow - win;
+  let mn = Infinity, mx = -Infinity;
+  for (const s of plot.series) for (const [t, v] of s.data) if (t >= t0 && t <= tNow) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  if (!isFinite(mn)) { mn = -1; mx = 1; }
+  if (mx - mn < 1e-9) { mn -= 1; mx += 1; }
+  const pad = (mx - mn) * 0.08; mn -= pad; mx += pad;
+  const L = 58, R = 10, T = 10, B = 20, pw = w - L - R, ph = h - T - B;
+  ctx.strokeStyle = plot.colors.grid; ctx.fillStyle = plot.colors.text; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {
+    const y = T + ph * i / 4, v = mx - (mx - mn) * i / 4;
+    ctx.beginPath(); ctx.moveTo(L, y + 0.5); ctx.lineTo(L + pw, y + 0.5); ctx.stroke();
+    ctx.fillText(fmtNum(+v.toPrecision(3)), L - 6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i <= 5; i++) { const x = L + pw * i / 5; ctx.fillText(i === 5 ? 'now' : `-${(plot.window * (5 - i) / 5).toFixed(0)}s`, x, T + ph + 5); }
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+  ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
+  for (const s of plot.series) {
+    ctx.strokeStyle = s.color; ctx.beginPath(); let started = false;
+    for (const [t, v] of s.data) {
+      if (t < t0 - 1000) continue;
+      const x = L + (t - t0) / win * pw, y = T + (1 - (v - mn) / (mx - mn)) * ph;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ============================== teleop ============================== */
+const tele = { keys: new Set(), pad: null, zeroes: 0, warned: false };
+function syncTeleLabels() { $('#linMaxV').textContent = (+$('#linMax').value).toFixed(2) + ' m/s'; $('#angMaxV').textContent = (+$('#angMax').value).toFixed(2) + ' rad/s'; }
+$('#linMax').oninput = syncTeleLabels; $('#angMax').oninput = syncTeleLabels; syncTeleLabels();
+$('#cmdTopic').onchange = () => store.set('cmdTopic', $('#cmdTopic').value.trim());
+$('#cmdType').onchange = () => store.set('cmdType', $('#cmdType').value);
+function teleVec() {
+  let vx = 0, vy = 0, wz = 0; const k = tele.keys;
+  if (k.has('w')) vx += 1; if (k.has('s')) vx -= 1; if (k.has('a')) wz += 1; if (k.has('d')) wz -= 1; if (k.has('q')) vy += 1; if (k.has('e')) vy -= 1;
+  if (tele.pad) { vx += tele.pad[0]; wz += tele.pad[1]; }
+  const c = x => Math.max(-1, Math.min(1, x));
+  return { vx: c(vx), vy: c(vy), wz: c(wz) };
+}
+function sendTwist(v) {
+  const lin = +$('#linMax').value, ang = +$('#angMax').value;
+  const twist = { linear: { x: v.vx * lin, y: v.vy * lin, z: 0 }, angular: { x: 0, y: 0, z: v.wz * ang } };
+  const type = $('#cmdType').value;
+  let msg = twist;
+  if (type.endsWith('TwistStamped')) { const ms = Date.now(); msg = { header: { stamp: { sec: Math.floor(ms / 1000), nanosec: (ms % 1000) * 1e6 }, frame_id: 'base_link' }, twist }; }
+  return ros.publish($('#cmdTopic').value.trim(), type, msg);
+}
+function stopAll() {
+  const v = teleVec(), was = v.vx || v.vy || v.wz;
+  tele.keys.clear(); tele.pad = null; $$('#pad button').forEach(b => b.classList.remove('active'));
+  if (was) tele.zeroes = 3;
+}
+setInterval(() => {
+  const v = teleVec(), active = v.vx || v.vy || v.wz;
+  if (active) {
+    const ok = sendTwist(v); tele.zeroes = 3;
+    if (!ok && !tele.warned) { tele.warned = true; log('Not connected, so drive commands are not being sent.', 'warn'); }
+    $('#teleState').textContent = ok ? `Sending: vx ${(v.vx * $('#linMax').value).toFixed(2)}, vy ${(v.vy * $('#linMax').value).toFixed(2)}, wz ${(v.wz * $('#angMax').value).toFixed(2)}` : 'Not connected.';
+  } else if (tele.zeroes > 0) { sendTwist({ vx: 0, vy: 0, wz: 0 }); tele.zeroes--; tele.warned = false; $('#teleState').textContent = 'Stopped.'; }
+}, 100);
+$$('#pad button[data-d]').forEach(b => {
+  const d = b.dataset.d.split(',').map(Number);
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); tele.pad = d; b.classList.add('active'); });
+  const up = () => { if (tele.pad === d) tele.pad = null; b.classList.remove('active'); };
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+});
+$('#btnStop').onclick = () => { stopAll(); tele.zeroes = 3; };
+document.addEventListener('keydown', e => {
+  if (!$('#kbEnable').checked || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== 'checkbox') return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); stopAll(); return; }
+  if ('wasdqe'.includes(k) && k.length === 1) { e.preventDefault(); tele.keys.add(k); }
+});
+document.addEventListener('keyup', e => tele.keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', stopAll);
+
+/* ============================== connection UI ============================== */
+ros.onstatus = s => {
+  const d = $('#connDot'); d.className = 'dot ' + s; d.title = s[0].toUpperCase() + s.slice(1);
+  $('#btnConnect').textContent = (s === 'connected' || s === 'connecting') ? 'Disconnect' : 'Connect';
+  if (s !== 'connected') stopAll();
+};
+ros.onopen = refreshGraph;
+$('#btnConnect').onclick = () => {
+  if (ros.want || ros.connected) { ros.disconnect(); log('Disconnected.'); return; }
+  const url = $('#wsUrl').value.trim(); store.set('ws', url); ros.connect(url);
+};
+$('#wsUrl').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnConnect').click(); });
+
+/* ============================== main loop ============================== */
+let frames = 0, fpsT = performance.now(), infoT = 0;
+function loop(t) {
+  requestAnimationFrame(loop);
+  controls.update();
+  if (state.jointSource === 'sim') simulate(t / 1000);
+  if (selBox) selBox.update();
+  sampleJoints(t);
+  updateJointUI();
+  renderer.render(scene, camera);
+  drawPlot(t);
+  if (state.selected && t - infoT > 200) { infoT = t; renderSelInfo(); }
+  frames++;
+  if (t - fpsT >= 1000) {
+    $('#fps').textContent = Math.round(frames * 1000 / (t - fpsT));
+    $('#rxRate').textContent = Math.round(ros.rx * 1000 / (t - fpsT)); ros.rx = 0;
+    const now = performance.now();
+    while (jsTimes.length && jsTimes[0] < now - 2000) jsTimes.shift();
+    $('#jsRate').textContent = state.jointSource === 'live' ? (jsTimes.length > 1 ? `${((jsTimes.length - 1) / ((jsTimes[jsTimes.length - 1] - jsTimes[0]) / 1000)).toFixed(0)} Hz` : 'no data') : '';
+    frames = 0; fpsT = t;
+  }
+}
+requestAnimationFrame(loop);
+$('#emptyState').classList.remove('hidden');
+loadDemo();
+log('Ready. Connect to rosbridge, or explore the demo robot.');
+</script>
+</body>
+</html>
